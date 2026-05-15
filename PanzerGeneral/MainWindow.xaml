@@ -1,0 +1,28 @@
+﻿<Window x:Class="PanzerGeneral.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Panzer General" Height="950" Width="1600">
+
+    <Grid Background="Black">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Pasek kontrolny -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="8" Background="DarkSlateGray">
+            <TextBlock Name="PlayerLabel" Foreground="White" Margin="8" FontSize="14" FontWeight="Bold" MinWidth="200"/>
+            <TextBlock Name="PhaseLabel" Foreground="Cyan" Margin="8" FontSize="14" FontWeight="Bold" MinWidth="180"/>
+            <Button Name="NextTurnButton" Content="Next Turn" Click="NextTurnButton_Click" Margin="8" Padding="8" Width="100"/>
+            <Button Name="ToggleDeployButton" Content="Deploy Unit" Click="ToggleDeployButton_Click" Margin="8" Padding="8" Width="100"/>
+            <Button Name="EndTurnButton" Content="End Turn" Click="EndTurnButton_Click" Margin="8" Padding="8" Width="100"/>
+            <Button Name="EmulateButton" Content="Emulate" Click="EmulateButton_Click" Margin="8" Padding="8" Width="100" Background="#444" Foreground="White"/>
+        </StackPanel>
+
+        <!-- Mapa w ScrollViewer -->
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="Black">
+            <Canvas Name="GameCanvas" Background="#0a1a2e"/>
+        </ScrollViewer>
+    </Grid>
+
+</Window>
