@@ -1,87 +1,108 @@
 # PanzerGeneral
 
-[![CI](https://github.com/Jakub-Syrek/PanzerGeneral/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Jakub-Syrek/PanzerGeneral/actions/workflows/ci.yml)
-[![Release](https://github.com/Jakub-Syrek/PanzerGeneral/actions/workflows/release.yml/badge.svg)](https://github.com/Jakub-Syrek/PanzerGeneral/actions/workflows/release.yml)
-[![Latest release](https://img.shields.io/github/v/release/Jakub-Syrek/PanzerGeneral?include_prereleases&sort=semver)](https://github.com/Jakub-Syrek/PanzerGeneral/releases)
-![.NET](https://img.shields.io/badge/.NET-9.0--windows-512BD4?logo=dotnet&logoColor=white)
-![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)
-![Genre](https://img.shields.io/badge/genre-hex%20wargame-8B4513)
-![Last commit](https://img.shields.io/github/last-commit/Jakub-Syrek/PanzerGeneral)
-![Code size](https://img.shields.io/github/languages/code-size/Jakub-Syrek/PanzerGeneral)
+Turn-based hex-grid wargame for Windows, inspired by SSI's Panzer General.
 
-WPF hex-grid wargame inspired by the classic SSI Panzer General series. .NET 9, Windows-only. Turn-based combat between Allied units (infantry, mechanized, tanks) on a hex map with terrain, AI opponent, and sound.
+![CI](https://github.com/Jakub-Syrek/PanzerGeneral/actions/workflows/tests.yml/badge.svg)
+![Release](https://img.shields.io/github/v/release/Jakub-Syrek/PanzerGeneral)
+![.NET](https://img.shields.io/badge/.NET-9.0--windows-512BD4?logo=dotnet)
+![License](https://img.shields.io/github/license/Jakub-Syrek/PanzerGeneral)
+![Last commit](https://img.shields.io/github/last-commit/Jakub-Syrek/PanzerGeneral)
+
+## Overview
+
+PanzerGeneral is a Windows-only WPF game in which the player commands a small
+allied force across a hex map and fights an AI opponent for control of city
+objectives. The rules are intentionally compact: pure attack and defense
+values, terrain modifiers, movement points, and a deployment phase before the
+action begins.
 
 ## Gameplay
 
-- **Hex grid map** — every tile has a terrain type (`Helpers/TerrainType.cs`, `TerrainCatalog.cs`) that affects movement cost and combat modifiers.
-- **Units** — infantry, mechanized, tank (`Helpers/UnitType.cs`, `UnitCatalog.cs`). Each unit has movement points, attack, defense and HP. Sprites in `Resources/*_allied.png`.
-- **Turn-based** — `Helpers/TurnManager.cs` alternates between the player and the AI side.
-- **AI opponent** — `Game/AiController.cs` picks moves and attacks for the enemy side.
-- **Combat** — `Game/CombatResolver.cs` calculates damage from unit stats, terrain bonuses, and a random factor.
-- **Sound** — `Helpers/SoundManager.cs` plays UI / combat / movement cues.
+- **Hex map** - rendered with WPF polygons via `HexHelper`. Coordinates are
+  stored in offset (column, row) form and converted to cube coordinates only
+  when distance has to be computed.
+- **Terrain** - twelve types (`TerrainType`) with per-tile move costs, defense
+  bonuses, and line-of-sight rules (`TerrainCatalog`).
+- **Units** - infantry, mechanized, tank (`UnitCatalog`), each with attack,
+  defense, HP, and movement points.
+- **Combat** - deterministic damage: `max(1, attack - (defense + terrainBonus))`,
+  applied to the defender's HP (`CombatResolver`).
+- **Turns** - `TurnManager` runs a one-turn deployment phase (5 units per
+  player) and then alternates action turns, resetting movement at the start
+  of each side's turn.
+- **AI** - `AiController` enumerates reachable hexes with BFS over movement
+  cost, scores positions on defensive terrain, objective proximity, adjacent
+  enemy threat and target priority, and emits an ordered action plan.
 
-## Build & run
-
-Requires .NET 9 SDK and Windows.
-
-```powershell
-dotnet build PanzerGeneral\PanzerGeneral.csproj -c Release
-dotnet run --project PanzerGeneral\PanzerGeneral.csproj
-```
-
-Or open `PanzerGeneral.sln` in Visual Studio 2026+ / Rider.
-
-## CI / CD
-
-Two GitHub Actions workflows:
-
-- **[ci.yml](.github/workflows/ci.yml)** — runs on every push to `main` and PR → `main`. Builds Debug + Release on `windows-latest` with the .NET 9 SDK to catch breakage early.
-- **[release.yml](.github/workflows/release.yml)** — runs when a `v*` tag is pushed. Publishes two flavors and attaches them to an auto-created GitHub Release:
-  - `PanzerGeneral-<ver>-win-x64-selfcontained.zip` — single-file `.exe` with .NET 9 runtime bundled (~70 MB, no install)
-  - `PanzerGeneral-<ver>-win-x64-framework-dependent.zip` — small (~5 MB) but requires .NET 9 Desktop Runtime on the user's machine
-
-To cut a release:
-
-```powershell
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-Dependabot ([.github/dependabot.yml](.github/dependabot.yml)) opens weekly PRs for outdated NuGet packages and GitHub Actions versions every Monday.
-
-## Project layout
+## Architecture
 
 ```
 PanzerGeneral/
   PanzerGeneral.sln
-  PanzerGeneral/
-    App.xaml(.cs)            WPF application entry point
-    MainWindow.xaml(.cs)     Main game window
-    PanzerGeneral.csproj     .NET 9 WPF SDK project (System.Windows.Extensions)
+  PanzerGeneral/                Main WPF project (net9.0-windows)
+    App.xaml(.cs)               Application entry point
+    MainWindow.xaml(.cs)        Game window, rendering, input
     Game/
-      AiController.cs        AI side turn logic
-      CombatResolver.cs      Damage calculations
+      AiController.cs           Enemy turn planner
+      CombatResolver.cs         Damage calculation
     Helpers/
-      HexHelper.cs           Hex-grid geometry (axial/cube coords, neighbors, distance)
-      HexTile.cs             One tile on the map
-      TerrainCatalog.cs      All available terrain types and their modifiers
-      TerrainType.cs         Plain / forest / mountain / city / road / ...
-      TextureHelper.cs       Loads PNG sprites from /Resources at runtime
-      SoundManager.cs        Plays sfx
-      TurnManager.cs         Player ↔ AI turn switching
-      UnitCatalog.cs         All unit kinds and their base stats
-      UnitType.cs            Infantry / Mechanized / Tank
-      Unit.cs                Helper unit representation (cf. Models/Unit.cs)
-    Models/
-      Unit.cs                Game-state unit (HP, position, owner, type)
-    Resources/
-      infantry_allied.png    Allied infantry sprite (set CopyToOutputDirectory=Always)
-      mechanized_allied.png
-      tank_allied.png
+      HexHelper.cs              Hex geometry
+      HexTile.cs                Map cell
+      TerrainCatalog.cs         Terrain factory and modifiers
+      TerrainType.cs            Terrain enum
+      TextureHelper.cs          Sprite/texture loading
+      SoundManager.cs           Sound effects
+      TurnManager.cs            Phase and turn state
+      Unit.cs                   Unit entity
+      UnitCatalog.cs            Unit factory and stats
+      UnitType.cs               Unit enum
+    Resources/                  PNG sprites for allied units
+  PanzerGeneral.Tests/          NUnit + NSubstitute test project
 ```
 
-## Notes
+## Build & Run
 
-- Only allied sprites are committed — enemy / axis sprites need to be added to `Resources/` and registered the same way in the `.csproj` for them to ship to the output folder.
-- There are two `Unit.cs` files (`Helpers/` and `Models/`). They serve different roles; if you refactor, pick one canonical type and remove the duplicate.
-- `System.Windows.Extensions` is referenced for `System.Media.SoundPlayer` and friends.
+Requires the .NET 9 SDK on Windows.
+
+```powershell
+dotnet build PanzerGeneral.sln -c Release
+dotnet run --project PanzerGeneral/PanzerGeneral.csproj
+```
+
+Or open `PanzerGeneral.sln` in Visual Studio 2022/2026 or Rider.
+
+## Testing
+
+```powershell
+dotnet test PanzerGeneral.sln -c Release
+```
+
+The test project (`PanzerGeneral.Tests`) targets the pure game-logic types -
+combat, terrain, turns, AI scoring - and avoids anything bound to WPF
+rendering. NUnit is the runner; NSubstitute is available for mocking.
+
+## Versioning
+
+This repository follows [Semantic Versioning](https://semver.org). Versions
+are bumped automatically by the [version workflow](.github/workflows/version.yml)
+on each push to `main`:
+
+- a commit footer containing `BREAKING CHANGE:` -> major
+- a `feat:` commit -> minor
+- anything else (`fix:`, `chore:`, `docs:`, `test:`, `ci:`, `refactor:`) -> patch
+
+The workflow writes `<Version>` into the main `.csproj`, commits
+`chore(release): vX.Y.Z`, tags `vX.Y.Z`, and publishes a GitHub Release with
+the framework-dependent and self-contained Windows builds attached.
+
+See [CHANGELOG.md](CHANGELOG.md) for a human-readable history.
+
+## License
+
+[MIT](LICENSE) - Copyright (c) 2026 Jakub Syrek.
+
+## Contact
+
+- Author: Jakub Syrek - <jakubvonsyrek@gmail.com>
+- Issues: <https://github.com/Jakub-Syrek/PanzerGeneral/issues>
+- Security: see [SECURITY.md](SECURITY.md)
