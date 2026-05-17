@@ -132,7 +132,7 @@ jobs:
           Compress-Archive -Path publish/win-x64-framework/* -DestinationPath "PanzerGeneral-$v-win-x64-framework-dependent.zip"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
           name: PanzerGeneral ${{ steps.ver.outputs.tag }}
