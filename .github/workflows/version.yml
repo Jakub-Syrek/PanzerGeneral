@@ -1,0 +1,146 @@
+name: Version and Release
+
+on:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: version-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Bump version and publish
+    runs-on: windows-latest
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Compute next version
+        id: ver
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $lastTag = (git tag --list 'v*' --sort=-v:refname | Select-Object -First 1)
+          if (-not $lastTag) {
+            $lastTag = 'v0.0.0'
+            $range = 'HEAD'
+          } else {
+            $range = "$lastTag..HEAD"
+          }
+          $major = 0; $minor = 0; $patch = 0
+          if ($lastTag -match '^v(\d+)\.(\d+)\.(\d+)$') {
+            $major = [int]$Matches[1]; $minor = [int]$Matches[2]; $patch = [int]$Matches[3]
+          }
+          $log = git log $range --format='%B%n---END---'
+          $bump = 'patch'
+          foreach ($line in ($log -split "`n")) {
+            if ($line -match 'BREAKING CHANGE') { $bump = 'major'; break }
+            if ($line -match '^feat(\(.+\))?!:')   { $bump = 'major'; break }
+            if ($line -match '^[a-z]+(\(.+\))?!:') { $bump = 'major'; break }
+            if ($line -match '^feat(\(.+\))?:' -and $bump -ne 'major') { $bump = 'minor' }
+          }
+          switch ($bump) {
+            'major' { $major++; $minor = 0; $patch = 0 }
+            'minor' { $minor++; $patch = 0 }
+            default { $patch++ }
+          }
+          $version = "$major.$minor.$patch"
+          $tag = "v$version"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "bump=$bump" >> $env:GITHUB_OUTPUT
+          "previous=$lastTag" >> $env:GITHUB_OUTPUT
+          Write-Host "Previous tag: $lastTag"
+          Write-Host "Bump: $bump"
+          Write-Host "Next version: $version"
+
+      - name: Update csproj version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = 'PanzerGeneral/PanzerGeneral.csproj'
+          [xml]$xml = Get-Content $path
+          $pg = $xml.Project.PropertyGroup
+          if ($pg -is [System.Array]) { $pg = $pg[0] }
+          $node = $pg.SelectSingleNode('Version')
+          if ($null -eq $node) {
+            $node = $xml.CreateElement('Version')
+            [void]$pg.AppendChild($node)
+          }
+          $node.InnerText = '${{ steps.ver.outputs.version }}'
+          $xml.Save((Resolve-Path $path))
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit, tag, and push
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git add PanzerGeneral/PanzerGeneral.csproj
+          git commit -m "chore(release): ${{ steps.ver.outputs.tag }}"
+          git tag ${{ steps.ver.outputs.tag }}
+          git push origin HEAD:${{ github.ref_name }}
+          git push origin ${{ steps.ver.outputs.tag }}
+
+      - name: Restore
+        run: dotnet restore PanzerGeneral/PanzerGeneral.csproj
+
+      - name: Publish self-contained win-x64
+        run: >
+          dotnet publish PanzerGeneral/PanzerGeneral.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:DebugType=none
+          -p:Version=${{ steps.ver.outputs.version }}
+          -o publish/win-x64
+
+      - name: Publish framework-dependent win-x64
+        run: >
+          dotnet publish PanzerGeneral/PanzerGeneral.csproj
+          -c Release
+          -r win-x64
+          --self-contained false
+          -p:DebugType=none
+          -p:Version=${{ steps.ver.outputs.version }}
+          -o publish/win-x64-framework
+
+      - name: Package release artefacts
+        shell: pwsh
+        run: |
+          $v = '${{ steps.ver.outputs.version }}'
+          Compress-Archive -Path publish/win-x64/* -DestinationPath "PanzerGeneral-$v-win-x64-selfcontained.zip"
+          Compress-Archive -Path publish/win-x64-framework/* -DestinationPath "PanzerGeneral-$v-win-x64-framework-dependent.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: PanzerGeneral ${{ steps.ver.outputs.tag }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: |
+            PanzerGeneral-${{ steps.ver.outputs.version }}-win-x64-selfcontained.zip
+            PanzerGeneral-${{ steps.ver.outputs.version }}-win-x64-framework-dependent.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
